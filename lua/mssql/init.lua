@@ -48,11 +48,26 @@ local function enable_lsp(opts)
 			["connection/complete"] = function(_, result)
 				if result.errorMessage then
 					vim.notify("Could not connect: " .. result.errorMessage, vim.log.levels.ERROR)
+					return result,
+						vim.lsp.rpc.rpc_response_error(
+							vim.lsp.protocol.ErrorCodes.UnknownErrorCode,
+							result.errorMessage,
+							nil
+						)
 				else
 					vim.notify("Connected", vim.log.levels.INFO)
+					return result, nil
 				end
 			end,
 		},
+		["textDocument/intelliSenseReady"] = function(err, result)
+			if err then
+				vim.notify("Could not start intellisense: " .. vim.inspect(err), vim.log.levels.ERROR)
+			else
+				vim.notify("Intellisense ready", vim.log.levels.INFO)
+			end
+			return result, err
+		end,
 	}
 	vim.lsp.enable("mssql_ls")
 end
@@ -108,11 +123,10 @@ local function setup_async(opts)
 			config.last_downloaded_from = download_url
 			write_json_file(config_file, config)
 		end
-
-		enable_lsp(opts)
-		set_auto_commands()
 	end
 
+	enable_lsp(opts)
+	set_auto_commands()
 	plugin_opts = opts
 end
 
@@ -137,11 +151,6 @@ local edit_connections = function(opts)
 end
 
 local connect_async = function(opts)
-	local client = assert(
-		vim.lsp.get_clients({ name = "mssql_ls", bufnr = 0 })[1],
-		"No MSSQL lsp client attached. Create a new sql query or open an existing sql file"
-	)
-
 	local f = io.open(opts.connections_file, "r")
 	if not f then
 		edit_connections(opts)
@@ -159,13 +168,13 @@ local connect_async = function(opts)
 	local con = utils.ui_select_async(vim.tbl_keys(json), { prompt = "Choose connection" })
 
 	local connectParams = {
-		ownerUri = vim.fn.expand("%:p"),
+		ownerUri = vim.uri_from_fname(vim.fn.expand("%:p")),
 		connection = {
 			options = json[con],
 		},
 	}
 
-	local _, err = utils.lsp_request_async(client, "connection/connect", connectParams)
+	local _, err = utils.lsp_request_async("connection/connect", connectParams)
 	if err then
 		error("Could not connect: " .. err.message)
 	end

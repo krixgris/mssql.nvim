@@ -11,11 +11,12 @@ return {
 
 	get_completion_items = function()
 		-- Trigger <C-x><C-o> to invoke omnifunc
-		vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("i<C-x><C-o>", true, false, true), "n", true)
+		vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("a<C-x><C-o>", true, false, true), "n", true)
 
 		-- Completion results are async
 		defer_async(500)
 		local items = vim.fn.complete_info({ "items" }).items or {}
+		vim.cmd("stopinsert")
 		return vim.iter(items)
 			:map(function(item)
 				return item.word or item.abbr
@@ -26,6 +27,7 @@ return {
 	ui_select_fake = function(index)
 		index = index or 1
 		local original_select = vim.ui.select
+		---@diagnostic disable-next-line: duplicate-set-field
 		vim.ui.select = function(items, _, on_choice)
 			vim.ui.select = original_select
 			vim.defer_fn(function()
