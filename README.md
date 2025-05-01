@@ -15,7 +15,11 @@ An SQL Server plugin for neovim. **Not ready yet!** If you are looking for somet
 - [x] Cross database query autocomplete
 - [x] Refresh intellisense cache
 - [x] Disconnect
-- [ ] Execute queries (first few lines only)
+- [ ] Execute queries (first 100 lines only)
+  - Each batch will open in a new buffer. Mark the buffer as a result buffer.
+  - Upon executing, delete all existing result buffers.
+- [ ] Key maps, docs, announce initial release
+- [ ] Execute queries with a configurable memory limit
 - [ ] Switch database
 - [ ] Auto format
 
@@ -33,7 +37,8 @@ require("mssql.nvim").setup()
 require("mssql.nvim").setup({
   data_dir = "/custom/path",
   tools_file = "/path/to/sqltools/executable",
-  connections_file = "/path/to/connections.json"
+  connections_file = "/path/to/connections.json",
+  max_rows = 100
 })
 
 -- With callback
@@ -51,6 +56,8 @@ end)
 | `data_dir`         | `string?` | Directory to store download tools and internal config options                                         | `vim.fn.stdpath("data")`                     |
 | `tools_file`       | `string?` | Path to an existing [SQL tools service](https://github.com/microsoft/sqltoolsservice/releases) binary | `nil` (Binary auto downloaded to `data_dir`) |
 | `connections_file` | `string?` | Path to a json file containing connections (see below)                                                | `<data_dir>/connections.json`                |
+| `max_rows`         | `int?`    | Max rows to return for queries. Needed so that large results don't crash neovim.                      | `100`                                        |
+| `max_column_width` | int?      | If a result row has a field text length larger than this it will be truncated when displayed          | `100`                                        |
 
 ### Notes
 
