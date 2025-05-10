@@ -280,11 +280,8 @@ local function switch_database_async(buf)
 	end
 	local client = query_manager.get_lsp_client()
 
-	local result, err = utils.lsp_request_async(
-		client,
-		"connection/listdatabases",
-		{ ownerUri = vim.uri_from_fname(vim.api.nvim_buf_get_name(buf)) }
-	)
+	local result, err =
+		utils.lsp_request_async(client, "connection/listdatabases", { ownerUri = utils.lsp_file_uri(buf) })
 
 	if err then
 		error("Error listing databases: " .. err.message, 0)
@@ -293,10 +290,7 @@ local function switch_database_async(buf)
 	end
 
 	local db = utils.ui_select_async(result.databaseNames, { prompt = "Choose database" })
-	if not db then
-		utils.log_info("No database chosen. Using default")
-		return
-	end
+	utils.safe_assert(db, "No database chosen")
 
 	-- get the connect params first, because they get set
 	-- to nil when we disconnect
@@ -381,7 +375,7 @@ local M = {
 	refresh_intellisense_cache = function()
 		local success, msg = pcall(function()
 			local client = utils.get_lsp_client()
-			client:notify("textDocument/rebuildIntelliSense", { ownerUri = vim.uri_from_fname(vim.fn.expand("%:p")) })
+			client:notify("textDocument/rebuildIntelliSense", { ownerUri = utils.lsp_file_uri() })
 			utils.log_info("Refreshing intellisense...")
 		end)
 		if not success then

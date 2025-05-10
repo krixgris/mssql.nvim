@@ -20,6 +20,7 @@ vim.opt.rtp:prepend(get_plugin_root())
 vim.opt.swapfile = false
 -- Don't have autocomplete auto insert selections
 vim.o.completeopt = "menu,menuone,noselect,noinsert"
+vim.lsp.set_log_level("debug")
 
 local function run_test(test)
 	print_without_prompt("=== Running: " .. test.test_name .. " ===")
@@ -45,6 +46,7 @@ local tests = {
 	require("tests.execute_query_spec"),
 	require("tests.switch_database_spec"),
 	require("tests.query_zero_rows_spec"),
+	require("tests.file_with_space_spec"),
 }
 
 coroutine.resume(coroutine.create(function()
