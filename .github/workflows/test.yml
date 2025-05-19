@@ -10,6 +10,8 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest]
+        # Getting problems on mac os
+        # os: [ubuntu-latest, macos-latest, windows-latest]
 
     env:
       DbServer: localhost
@@ -43,6 +45,11 @@ jobs:
           winget install Neovim.Neovim --silent --accept-package-agreements --accept-source-agreements
           echo "$Env:ProgramFiles\Neovim\bin" | Out-File -Append -FilePath $env:GITHUB_PATH -Encoding utf8
 
+      - name: Install Neovim (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install neovim
+
       - name: Install Neovim (Linux)
         if: runner.os == 'Linux'
         run: |
@@ -54,3 +61,11 @@ jobs:
       - name: Run Neovim tests
         run: |
           nvim -u runtests.lua --headless
+
+      - name: Upload Neovim state folder
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nvim-state-dump
+          path: nvim-state-dump
+          if-no-files-found: ignore
