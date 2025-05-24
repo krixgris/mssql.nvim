@@ -162,9 +162,10 @@ Each connection object takes
 [standard connection properties](docs/Connections-Json.md). On top of those, you
 can also provide these useful properties:
 
-| Property            | Type   | Description                                                          |
-| ------------------- | ------ | -------------------------------------------------------------------- |
-| `promptForDatabase` | `bool` | After connecting to the server, select which database to connect to. |
+| Property            | Type   | Description                                                                       |
+| ------------------- | ------ | --------------------------------------------------------------------------------- |
+| `promptForDatabase` | `bool` | After connecting to the server, select which database to connect to.              |
+| `promptForPassword` | `bool` | Ask for the password each time you connect instead of storing it in the json file |
 
 ## Options
 
@@ -207,14 +208,3 @@ end)
 - `setup()` runs asynchronously as it may take some time to first download and
   extract the sql tools. Pass a callback as the second argument if you need to
   run code after initialization.
-
-## Roadmap
-
-- Save queries as csv/excel
-- Backup/restore databases (something I use in SSMS a lot)
-- Object explorer
-
-Long term:
-
-- Tree sitter
-- Formatter
