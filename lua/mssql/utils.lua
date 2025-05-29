@@ -80,6 +80,46 @@ local get_lsp_client = function(owner_uri)
 	)
 end
 
+---makes a request to the mssql lsp client
+---@param client vim.lsp.Client
+---@param method string
+---@param params any
+---@return any
+---@return lsp.ResponseError?
+local lsp_request_async = function(client, method, params)
+	local this = coroutine.running()
+	client:request(method, params, function(err, result, _, _)
+		try_resume(this, result, err)
+	end)
+	return coroutine.yield()
+end
+
+local function get_rows_async(subset_params)
+	if not (subset_params and subset_params.rowsCount and subset_params.rowsCount > 0) then
+		return {}
+	end
+
+	local client = get_lsp_client(subset_params.ownerUri)
+	if subset_params then
+		local result, err = lsp_request_async(client, "query/subset", subset_params)
+		if err then
+			error("Error getting rows: " .. vim.inspect(err), 0)
+		elseif not result then
+			error("Error getting rows", 0)
+		end
+
+		return vim.iter(result.resultSubset.rows)
+			:map(function(cells)
+				return vim.iter(cells)
+					:map(function(cell)
+						return cell.displayValue
+					end)
+					:totable()
+			end)
+			:totable()
+	end
+end
+
 return {
 	contains = contains,
 	wait_for_schedule_async = wait_for_schedule_async,
@@ -133,19 +173,7 @@ return {
 		return coroutine.yield()
 	end,
 	get_lsp_client = get_lsp_client,
-	---makes a request to the mssql lsp client
-	---@param client vim.lsp.Client
-	---@param method string
-	---@param params any
-	---@return any
-	---@return lsp.ResponseError?
-	lsp_request_async = function(client, method, params)
-		local this = coroutine.running()
-		client:request(method, params, function(err, result, _, _)
-			try_resume(this, result, err)
-		end)
-		return coroutine.yield()
-	end,
+	lsp_request_async = lsp_request_async,
 	try_resume = try_resume,
 	ui_select_async = function(items, opts)
 		-- Schedule this as it gives other UI like which-key
@@ -187,4 +215,38 @@ return {
 	--- The LSP wants the file path to be absolute and start with file:///,
 	--- But it doesn't want special characters like spaces to be escaped.
 	lsp_file_uri = lsp_file_uri,
+
+	-- gets rows from the lsp given some subset parameters
+	get_rows_async = get_rows_async,
+
+	--- Executes a query and returns all the results in the first batch and result set as a table of rows
+	get_query_result_async = function(query_result_summary)
+		local subset_params = {
+			ownerUri = query_result_summary.ownerUri,
+			batchIndex = 0,
+			resultSetIndex = 0,
+			rowsStartIndex = 0,
+			rowsCount = query_result_summary.batchSummaries[1].resultSetSummaries[1].rowCount,
+		}
+
+		wait_for_schedule_async()
+
+		local rows = get_rows_async(subset_params)
+		local columnNames = vim.iter(query_result_summary.batchSummaries[1].resultSetSummaries[1].columnInfo)
+			:map(function(ci)
+				return ci.columnName
+			end)
+			:totable()
+		local result = {}
+
+		for _, row in pairs(rows) do
+			local item = {}
+			for index, _ in ipairs(columnNames) do
+				item[columnNames[index]] = row[index]
+			end
+			table.insert(result, item)
+		end
+
+		return result
+	end,
 }

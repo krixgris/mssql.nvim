@@ -2,6 +2,7 @@ local downloader = require("mssql.tools_downloader")
 local utils = require("mssql.utils")
 local display_query_results = require("mssql.display_query_results")
 local query_manager_module = require("mssql.query_manager")
+local interface = require("mssql.interface")
 
 local joinpath = vim.fs.joinpath
 
@@ -359,6 +360,53 @@ local function new_default_query_async(opts)
 	end
 end
 
+local function new_buffer_same_connection(connect_params)
+	local buf = new_query_async()
+	local query_manager = vim.b[buf].query_manager
+	if not query_manager then
+		error("CRITICAL: Lsp attached without query manager")
+	end
+
+	query_manager.connect_async(connect_params)
+	return buf
+end
+
+local function backup_database_async(query_manager)
+	if query_manager.get_state() ~= query_manager_module.states.Connected then
+		error("Connect to a database first", 0)
+	end
+	local connect_params = query_manager.get_connect_params()
+	if
+		not (
+			connect_params
+			and connect_params.connection
+			and connect_params.connection.options
+			and connect_params.connection.options.database
+		)
+	then
+		error("No connection found", 0)
+	end
+	local database = connect_params.connection.options.database
+	local dir = vim.fs.joinpath(vim.fn.getcwd(), database .. ".bak")
+	local query = string.format(
+		[[BACKUP DATABASE [%s]
+-- Change to your backup location
+TO DISK = N'%s'
+WITH 
+INIT, -- Remove if not overwriting
+STATS = 25]],
+		database,
+		dir
+	)
+
+	local bufnr = 0
+	if vim.trim(table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false))) ~= "" then
+		bufnr = new_buffer_same_connection(connect_params)
+	end
+
+	vim.api.nvim_buf_set_lines(bufnr, 0, 0, false, vim.split(query, "\n"))
+end
+
 local M = {
 	new_query = function()
 		utils.try_resume(coroutine.create(function()
@@ -434,15 +482,6 @@ local M = {
 		end))
 	end,
 
-	setup = function(opts, callback)
-		utils.try_resume(coroutine.create(function()
-			setup_async(opts)
-			if callback ~= nil then
-				callback()
-			end
-		end))
-	end,
-
 	lualine_component = {
 		function()
 			local qm = vim.b.query_manager
@@ -474,126 +513,31 @@ local M = {
 			return vim.b.query_manager ~= nil
 		end,
 	},
+
+	backup_database = function()
+		local query_manager = vim.b.query_manager
+		if not query_manager then
+			utils.log_error("No mssql lsp is attached. Create a new query first.")
+			return
+		end
+		utils.try_resume(coroutine.create(function()
+			backup_database_async(query_manager)
+		end))
+	end,
 }
 
 M.set_keymaps = function(prefix)
-	if not prefix then
-		return
-	end
+	interface.set_keymaps(prefix, M)
+end
 
-	local keymaps = {
-		new_query = { "n", M.new_query, desc = "New Query", icon = { icon = "", color = "yellow" } },
-		connect = { "c", M.connect, desc = "Connect", icon = { icon = "󱘖", color = "green" } },
-		disconnect = { "q", M.disconnect, desc = "Disconnect", icon = { icon = "", color = "red" } },
-		execute_query = {
-			"x",
-			M.execute_query,
-			desc = "Execute Query",
-			mode = { "n", "v" },
-			icon = { icon = "", color = "green" },
-		},
-		edit_connections = {
-			"e",
-			M.edit_connections,
-			desc = "Edit Connections",
-			icon = { icon = "󰅩", color = "grey" },
-		},
-		refresh_intellisense = {
-			"r",
-			M.refresh_intellisense_cache,
-			desc = "Refresh Intellisense",
-			icon = { icon = "", color = "grey" },
-		},
-		new_default_query = {
-			"d",
-			M.new_default_query,
-			desc = "New Default Query",
-			icon = { icon = "", color = "yellow" },
-		},
-		switch_database = {
-			"s",
-			M.switch_database,
-			desc = "Switch Database",
-			icon = { icon = "", color = "yellow" },
-		},
-	}
-
-	local success, wk = pcall(require, "which-key")
-	if success then
-		local wkeygroup = {
-			prefix,
-			group = "mssql",
-			icon = { icon = "", color = "yellow" },
-		}
-
-		local normal_group = vim.tbl_deep_extend("keep", wkeygroup, {})
-		normal_group.expand = function()
-			local qm = vim.b.query_manager
-			if not qm then
-				return { keymaps.new_query, keymaps.new_default_query, keymaps.edit_connections }
-			end
-
-			local state = qm.get_state()
-			local states = query_manager_module.states
-			if state == states.Connecting or state == states.Executing then
-				return {
-					keymaps.new_query,
-					keymaps.new_default_query,
-					keymaps.edit_connections,
-					keymaps.refresh_intellisense,
-				}
-			elseif state == states.Connected then
-				return {
-					keymaps.new_query,
-					keymaps.new_default_query,
-					keymaps.edit_connections,
-					keymaps.refresh_intellisense,
-					keymaps.execute_query,
-					keymaps.disconnect,
-					keymaps.switch_database,
-				}
-			elseif state == states.Disconnected then
-				return {
-					keymaps.new_query,
-					keymaps.new_default_query,
-					keymaps.edit_connections,
-					keymaps.refresh_intellisense,
-					keymaps.connect,
-				}
-			else
-				utils.log_error("Entered unrecognised query state: " .. state)
-				return {}
-			end
+M.setup = function(opts, callback)
+	utils.try_resume(coroutine.create(function()
+		setup_async(opts)
+		interface.set_user_commands(M)
+		if callback ~= nil then
+			callback()
 		end
-
-		wk.add(normal_group)
-
-		local visual_group = vim.tbl_deep_extend("keep", wkeygroup, {})
-		visual_group.mode = "v"
-		visual_group.expand = function()
-			local qm = vim.b.query_manager
-			if not qm then
-				return { keymaps.new_query, keymaps.new_default_query, keymaps.edit_connections }
-			end
-
-			local state = qm.get_state()
-			local states = query_manager_module.states
-			if state == states.Connecting or state == states.Executing or state == states.Disconnected then
-				return {}
-			elseif state == states.Connected then
-				return { keymaps.execute_query }
-			else
-				utils.log_error("Entered unrecognised query state: " .. state)
-				return {}
-			end
-		end
-
-		wk.add(visual_group)
-	else
-		for _, m in pairs(keymaps) do
-			vim.keymap.set(m.mode or "n", prefix .. m[1], m[2], { desc = m.desc })
-		end
-	end
+	end))
 end
 
 return M
