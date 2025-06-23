@@ -12,6 +12,7 @@ return {
 			new_query = { "n", M.new_query, desc = "New Query", icon = { icon = "", color = "yellow" } },
 			connect = { "c", M.connect, desc = "Connect", icon = { icon = "󱘖", color = "green" } },
 			disconnect = { "q", M.disconnect, desc = "Disconnect", icon = { icon = "", color = "red" } },
+			cancel_query = { "l", M.cancel_query, desc = "Cancel Query", icon = { icon = "", color = "red" } },
 			execute_query = {
 				"x",
 				M.execute_query,
@@ -53,12 +54,20 @@ return {
 				if qm then
 					local state = qm.get_state()
 					local states = query_manager_module.states
-					if state == states.Connecting or state == states.Executing then
+					if state == states.Connecting then
 						return {
 							keymaps.new_query,
 							keymaps.new_default_query,
 							keymaps.edit_connections,
 							keymaps.refresh_intellisense,
+						}
+					elseif state == states.Executing then
+						return {
+							keymaps.new_query,
+							keymaps.new_default_query,
+							keymaps.edit_connections,
+							keymaps.refresh_intellisense,
+							keymaps.cancel_query,
 						}
 					elseif state == states.Connected then
 						return {
@@ -89,6 +98,13 @@ return {
 								mode = { "n", "v" },
 								icon = { icon = "", color = "green" },
 							},
+						}
+					elseif state == states.Cancelling then
+						return {
+							keymaps.new_query,
+							keymaps.new_default_query,
+							keymaps.edit_connections,
+							keymaps.refresh_intellisense,
 						}
 					else
 						utils.log_error("Entered unrecognised query state: " .. state)
@@ -158,6 +174,7 @@ return {
 			NewQuery = M.new_query,
 			NewDefaultQuery = M.new_default_query,
 			SaveQueryResults = M.save_query_results,
+			CancelQuery = M.cancel_query,
 		}
 
 		local complete = function(_, _, _)
@@ -179,12 +196,20 @@ return {
 
 			local state = qm.get_state()
 			local states = query_manager_module.states
-			if state == states.Connecting or state == states.Executing then
+			if state == states.Connecting then
 				return {
 					"NewQuery",
 					"NewDefaultQuery",
 					"EditConnections",
 					"RefreshIntellisense",
+				}
+			elseif state == states.Executing then
+				return {
+					"NewQuery",
+					"NewDefaultQuery",
+					"EditConnections",
+					"RefreshIntellisense",
+					"CancelQuery",
 				}
 			elseif state == states.Connected then
 				return {
@@ -205,6 +230,13 @@ return {
 					"EditConnections",
 					"RefreshIntellisense",
 					"Connect",
+				}
+			elseif state == states.Cancelling then
+				return {
+					"NewQuery",
+					"NewDefaultQuery",
+					"EditConnections",
+					"RefreshIntellisense",
 				}
 			else
 				utils.log_error("Entered unrecognised query state: " .. state)
