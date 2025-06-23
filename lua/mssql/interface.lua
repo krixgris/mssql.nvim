@@ -26,10 +26,10 @@ return {
 				desc = "Edit Connections",
 				icon = { icon = "󰅩", color = "grey" },
 			},
-			refresh_intellisense = {
+			refresh_cache = {
 				"r",
-				M.refresh_intellisense_cache,
-				desc = "Refresh Intellisense",
+				M.refresh_cache,
+				desc = "Refresh Cache",
 				icon = { icon = "", color = "grey" },
 			},
 			new_default_query = {
@@ -37,6 +37,12 @@ return {
 				M.new_default_query,
 				desc = "New Default Query",
 				icon = { icon = "", color = "yellow" },
+			},
+			find_object = {
+				"f",
+				M.find_object,
+				desc = "Find",
+				icon = { icon = "", color = "green" },
 			},
 		}
 
@@ -59,14 +65,12 @@ return {
 							keymaps.new_query,
 							keymaps.new_default_query,
 							keymaps.edit_connections,
-							keymaps.refresh_intellisense,
 						}
 					elseif state == states.Executing then
 						return {
 							keymaps.new_query,
 							keymaps.new_default_query,
 							keymaps.edit_connections,
-							keymaps.refresh_intellisense,
 							keymaps.cancel_query,
 						}
 					elseif state == states.Connected then
@@ -74,7 +78,7 @@ return {
 							keymaps.new_query,
 							keymaps.new_default_query,
 							keymaps.edit_connections,
-							keymaps.refresh_intellisense,
+							keymaps.refresh_cache,
 							keymaps.execute_query,
 							keymaps.disconnect,
 							{
@@ -83,13 +87,13 @@ return {
 								desc = "Switch Database",
 								icon = { icon = "", color = "yellow" },
 							},
+							keymaps.find_object,
 						}
 					elseif state == states.Disconnected then
 						return {
 							keymaps.new_query,
 							keymaps.new_default_query,
 							keymaps.edit_connections,
-							keymaps.refresh_intellisense,
 							keymaps.connect,
 							{
 								"x",
@@ -104,7 +108,6 @@ return {
 							keymaps.new_query,
 							keymaps.new_default_query,
 							keymaps.edit_connections,
-							keymaps.refresh_intellisense,
 						}
 					else
 						utils.log_error("Entered unrecognised query state: " .. state)
@@ -168,12 +171,13 @@ return {
 			BackupDatabase = M.backup_database,
 			RestoreDatabase = M.restore_database,
 			ExecuteQuery = M.execute_query,
-			RefreshIntellisense = M.refresh_intellisense_cache,
+			RefreshCache = M.refresh_cache,
 			EditConnections = M.edit_connections,
 			SwitchDatabase = M.switch_database,
 			NewQuery = M.new_query,
 			NewDefaultQuery = M.new_default_query,
 			SaveQueryResults = M.save_query_results,
+			Find = M.find_object,
 			CancelQuery = M.cancel_query,
 		}
 
@@ -201,14 +205,12 @@ return {
 					"NewQuery",
 					"NewDefaultQuery",
 					"EditConnections",
-					"RefreshIntellisense",
 				}
 			elseif state == states.Executing then
 				return {
 					"NewQuery",
 					"NewDefaultQuery",
 					"EditConnections",
-					"RefreshIntellisense",
 					"CancelQuery",
 				}
 			elseif state == states.Connected then
@@ -216,19 +218,19 @@ return {
 					"NewQuery",
 					"NewDefaultQuery",
 					"EditConnections",
-					"RefreshIntellisense",
+					"RefreshCache",
 					"ExecuteQuery",
 					"Disconnect",
 					"SwitchDatabase",
 					"BackupDatabase",
 					"RestoreDatabase",
+					"Find",
 				}
 			elseif state == states.Disconnected then
 				return {
 					"NewQuery",
 					"NewDefaultQuery",
 					"EditConnections",
-					"RefreshIntellisense",
 					"Connect",
 				}
 			elseif state == states.Cancelling then
@@ -236,7 +238,6 @@ return {
 					"NewQuery",
 					"NewDefaultQuery",
 					"EditConnections",
-					"RefreshIntellisense",
 				}
 			else
 				utils.log_error("Entered unrecognised query state: " .. state)
