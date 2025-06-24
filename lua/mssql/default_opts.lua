@@ -13,15 +13,14 @@ return {
   --]]
 	open_results_in = "split",
 
-	-- Settings passed to the mssql language server. See https://github.com/Kurren123/mssql.nvim/blob/main/docs/Lsp-Settings.md
-	lsp_settings = {
-		format = {
-			placeSelectStatementReferencesOnNewLine = true,
-			keywordCasing = "Uppercase",
-			datatypeCasing = "Uppercase",
-			alignColumnDefinitionsInColumns = true,
-		},
-	},
+	--[[ Where to view messages sent from sql server (eg when executing queries)
+  Valid options are: 
+  "notification"                        - View as a vim notification
+  "buffer"                              - View in a messages buffer
+  function(message, is_error) ...       - Function which takes the message string and is_error boolean
+                                          (called for each message). Use this to view messages in a custom way
+  --]]
+	view_messages_in = "notification",
 
 	-- Max rows to return for queries. Needed so that large results don't crash neovim.
 	max_rows = 100,
@@ -31,6 +30,16 @@ return {
 
 	-- When choosing a table/view in the finder, immediately execute the generated SELECT statement
 	execute_generated_select_statements = true,
+
+	-- Settings passed to the mssql language server. See https://github.com/Kurren123/mssql.nvim/blob/main/docs/Lsp-Settings.md
+	lsp_settings = {
+		format = {
+			placeSelectStatementReferencesOnNewLine = true,
+			keywordCasing = "Uppercase",
+			datatypeCasing = "Uppercase",
+			alignColumnDefinitionsInColumns = true,
+		},
+	},
 
 	-- Options that will be set on buffers of sql file type (see https://neovim.io/doc/user/options.html)
 	sql_buffer_options = {
