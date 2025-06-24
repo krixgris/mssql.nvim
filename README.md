@@ -22,21 +22,19 @@ queries
 Execute queries, with results in markdown tables for automatic colouring and
 rendering
 
-<img src="./docs/screenshots/Results.png" alt="results screenshot" width="400"/>
+![queries](./docs/gifs/queries.gif)
 
 Find and generate scripts for tables, views, stored procedures and functions
 
-<img src="./docs/screenshots/Find.png" alt="finder screenshot" width="400"/>
+![find objects](./docs/gifs/find_objects.gif)
 
-User commands and optional which-key integration, showing only the key
-maps/commands which are possible (eg don't show `Connect` if we are already
-connected)
+User commands and which-key integration
 
-<img src="./docs/screenshots/Which-key.png" alt="Which key screenshot" width="300"/>
+![commands](./docs/gifs/commands.gif)
 
 <img src="./docs/screenshots/UserCommands.png" alt="User commands screenshot" width="400"/>
 
-Lualine integration
+Lualine/other status line integration
 
 <img src="./docs/screenshots/Lualine.png" alt="Which key screenshot" width="600"/>
 
