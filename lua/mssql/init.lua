@@ -4,6 +4,7 @@ local display_query_results = require("mssql.display_query_results")
 local query_manager_module = require("mssql.query_manager")
 local interface = require("mssql.interface")
 local default_opts = require("mssql.default_opts")
+local finder = require("mssql.find_object")
 
 local joinpath = vim.fs.joinpath
 
@@ -33,6 +34,17 @@ local function write_json_file(path, table)
 	else
 		error("Could not open file: " .. path, 0)
 	end
+end
+
+local function clean_cache()
+	local in_use_connections = {}
+	for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+		local qm = vim.b[buf].query_manager
+		if vim.api.nvim_buf_is_loaded(buf) and qm and qm.get_state() ~= query_manager_module.states.Disconnected then
+			table.insert(in_use_connections, qm.get_connect_params().connection.options)
+		end
+	end
+	finder.delete_unused_cache(in_use_connections)
 end
 
 local lsp_name = "mssql_ls"
@@ -79,6 +91,28 @@ local function enable_lsp(opts)
 				end
 
 				opts.view_messages_in(result.message.message, result.message.isError)
+			end,
+
+			["connection/connectionchanged"] = function(_, result, _)
+				if not result.ownerUri then
+					return
+				end
+				local bufnr = vim.iter(vim.api.nvim_list_bufs()):find(function(buf)
+					return utils.lsp_file_uri(buf) == result.ownerUri
+				end)
+				if not bufnr then
+					return
+				end
+				local qm = vim.b[bufnr].query_manager
+				if not (result and result.connection and qm) then
+					return
+				end
+
+				coroutine.resume(coroutine.create(function()
+					qm.connectionchanged_async(result)
+				end))
+
+				clean_cache()
 			end,
 		},
 		on_attach = function(client, bufnr)
@@ -171,6 +205,20 @@ local function set_auto_commands(opts)
 			end,
 		})
 	end
+
+	-- clean the sql object cache on buffer close
+	-- use the BufWipeout auto command so that at that point the buffer is not loaded
+	vim.api.nvim_create_autocmd("BufDelete", {
+		callback = function(args)
+			local buf = args.buf
+			if vim.b[buf].query_manager then
+				vim.b[buf].query_manager = nil
+				vim.schedule(function()
+					clean_cache()
+				end)
+			end
+		end,
+	})
 end
 
 local plugin_opts
@@ -477,7 +525,7 @@ local function new_default_query_async(opts)
 	else
 		utils.log_info("Connected")
 	end
-	query_manager.refresh_object_cache()
+	query_manager.initialise_cache_async()
 end
 
 --- If the current buffer is empty, put the query into this buffer. Otherwise,
@@ -704,7 +752,11 @@ local M = {
 		end
 		utils.try_resume(coroutine.create(function()
 			switch_database_async()
-			query_manager.refresh_object_cache(callback)
+			query_manager.initialise_cache_async()
+			clean_cache()
+			if callback then
+				callback()
+			end
 		end))
 	end,
 
@@ -717,7 +769,7 @@ local M = {
 		end
 		utils.try_resume(coroutine.create(function()
 			connect_async(plugin_opts, query_manager)
-			query_manager.refresh_object_cache()
+			query_manager.initialise_cache_async()
 		end))
 	end,
 
@@ -738,10 +790,12 @@ local M = {
 		end
 		-- refresh the object cache, fire and forget
 		show_caching_in_status_line = true
-		query_manager.refresh_object_cache(function()
+
+		coroutine.resume(coroutine.create(function()
+			query_manager.initialise_cache_async(true)
 			show_caching_in_status_line = false
 			vim.cmd("redrawstatus")
-		end)
+		end))
 
 		-- refresh the intellisense cache, fire and forget
 		local success, msg = pcall(function()
@@ -762,6 +816,7 @@ local M = {
 		end
 		utils.try_resume(coroutine.create(function()
 			query_manager.disconnect_async()
+			clean_cache()
 		end))
 	end,
 
@@ -820,7 +875,7 @@ local M = {
 					return "Connected"
 				end
 				local caching = ""
-				if show_caching_in_status_line and qm.is_refreshing_object_cache() then
+				if show_caching_in_status_line and qm.is_refreshing() then
 					caching = " (Caching database objects...)"
 				end
 
@@ -876,38 +931,18 @@ local M = {
 			return
 		end
 
-		if query_manager.is_refreshing_object_cache() then
+		if query_manager.is_refreshing() then
 			show_caching_in_status_line = true
 			vim.cmd("redrawstatus")
 			utils.log_error("Still caching. Try again in a few seconds...")
 			return
 		end
+
 		show_caching_in_status_line = false
 		vim.cmd("redrawstatus")
 
-		local title = "Find"
-		local connect_params = query_manager.get_connect_params()
-		if
-			connect_params
-			and connect_params.connection
-			and connect_params.connection.options
-			and connect_params.connection.options.database
-			and connect_params.connection.options.server
-		then
-			title = connect_params.connection.options.server .. " | " .. connect_params.connection.options.database
-		end
-
-		local db = connect_params.connection.options.database
-		local server = connect_params.connection.options.server
-		if not (db or server) then
-			return "Connected"
-		end
 		utils.try_resume(coroutine.create(function()
-			local item = require("mssql.find_object").find_async(
-				query_manager.get_object_cache(),
-				title,
-				query_manager.get_lsp_client()
-			)
+			local item = query_manager.find_async()
 			if not item then
 				return
 			end

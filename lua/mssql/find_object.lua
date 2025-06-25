@@ -37,6 +37,7 @@ local wait_for_notification_async = function(client, method, timeout)
 end
 
 local get_session_async = function(client, connection_options)
+	connection_options = vim.deepcopy(connection_options)
 	connection_options.ServerName = connection_options.server
 	connection_options.DatabaseName = connection_options.database
 	connection_options.UserName = connection_options.user
@@ -107,6 +108,7 @@ local nodeTypes = {
 }
 
 local get_object_cache_async = function(lsp_client, connection_options, cancellation_token)
+	utils.wait_for_schedule_async()
 	local session = get_session_async(lsp_client, connection_options)
 	utils.safe_assert(session and session.sessionId)
 
@@ -223,6 +225,51 @@ local generate_script_async = function(item, client)
 	}
 end
 
+-- one cache per server and db (ie per connect opts)
+local global_cache = {}
+
+local function is_refreshing(connection_options)
+	local key = connection_options
+	if type(key) == "table" then
+		key = vim.json.encode(connection_options)
+	end
+
+	return (
+		global_cache[key]
+		and global_cache[key].refresh_coroutine
+		and type(global_cache[key].refresh_coroutine) == "thread"
+		and coroutine.status(global_cache[key].refresh_coroutine) ~= "dead"
+	)
+end
+
+-- Initialises the cache, unless it already exists
+-- If force is true, then gets a new cache and overwrites
+local initialise_cache_async = function(lsp_client, connection_options, force)
+	local key = vim.json.encode(connection_options)
+	if not global_cache[key] then
+		global_cache[key] = {}
+	end
+
+	-- don't refresh if we are already refreshing or have refreshed previously
+	if (global_cache[key].cache or is_refreshing(key)) and not force then
+		return
+	end
+
+	-- cancel any currently running
+	if global_cache[key].cancellation_token then
+		global_cache[key].cancellation_token.cancel = true
+	end
+	local cancellation_token = { cancel = false }
+	global_cache[key].cancellation_token = cancellation_token
+
+	global_cache[key].refresh_coroutine = coroutine.running()
+	vim.cmd("redrawstatus")
+	local new_cache = get_object_cache_async(lsp_client, connection_options, cancellation_token)
+	if not cancellation_token.cancel then
+		global_cache[key].cache = new_cache
+	end
+end
+
 -- Picker
 local picker_icons = {
 	AggregateFunctionPartitionFunction = "󰡱",
@@ -276,7 +323,17 @@ local pick_item_async = function(cache, title)
 	return coroutine.yield()
 end
 
-local find_async = function(cache, title, lsp_client)
+local find_async = function(connection_options, lsp_client)
+	local title = "Find"
+	if connection_options and connection_options.database and connection_options.server then
+		title = connection_options.server .. " | " .. connection_options.database
+	end
+	local key = vim.json.encode(connection_options)
+	local cache = {}
+	if global_cache[key] and global_cache[key].cache then
+		cache = global_cache[key].cache
+	end
+
 	local item = pick_item_async(cache, title)
 	if not item then
 		return
@@ -284,4 +341,30 @@ local find_async = function(cache, title, lsp_client)
 	return generate_script_async(item, lsp_client)
 end
 
-return { find_async = find_async, get_object_cache_async = get_object_cache_async }
+local function delete_unused_cache(in_use_connections)
+	-- convert to keys first
+	local in_use = {}
+	for _, in_use_connection in ipairs(in_use_connections) do
+		local key = in_use_connection
+		if type(key) == "table" then
+			key = vim.json.encode(key)
+		end
+		in_use[key] = true
+	end
+
+	for cache_key, entry in pairs(global_cache) do
+		if not in_use[cache_key] then
+			if entry.cancellation_token then
+				entry.cancellation_token.cancel = true
+			end
+			global_cache[cache_key] = nil
+		end
+	end
+end
+
+return {
+	initialise_cache_async = initialise_cache_async,
+	delete_unused_cache = delete_unused_cache,
+	is_refreshing = is_refreshing,
+	find_async = find_async,
+}
